@@ -9,11 +9,11 @@
 ## Now (Today - Sept 3, remaining ~16 hours)
 
 ### Project Setup & Foundation
-- [ ] Create GitHub repository `bike-station-reliability` 
-- [ ] Set up Python project structure with `requirements.txt`
-- [ ] Install core dependencies: `FastAPI[all]`, `supabase`, `requests`, `pytest`, `python-dotenv`, `apscheduler`
-- [ ] Create Supabase project and get API keys (free tier is perfect for MVP)
-- [ ] Set up `.env` file with Supabase credentials and configuration
+- [x] Create GitHub repository `bike-station-reliability` 
+- [x] Set up Python project structure with `requirements.txt`
+- [ ] Install core dependencies: `FastAPI[all]`, `supabase`, `requests`, `unittest`, `python-dotenv`, `apscheduler`
+- [x] Create Supabase project and get API keys (free tier is perfect for MVP)
+- [x] Set up `.env` file with Supabase credentials and configuration
 - [ ] Set up basic FastAPI application with health check endpoint (`/api/health`)
 
 ### Database Foundation (Supabase)

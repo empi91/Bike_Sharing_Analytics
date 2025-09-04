@@ -1,0 +1,20 @@
+# Include production dependencies
+-r requirements.txt
+
+# Additional development tools
+# unittest is part of Python standard library - no additional dependencies needed
+
+# Code formatting and linting
+isort==5.13.2
+pre-commit==3.6.0
+
+# Type checking
+types-requests==2.31.0.10
+
+# Documentation
+mkdocs==1.5.3
+mkdocs-material==9.4.8
+
+# Development utilities
+ipython==8.17.2
+jupyter==1.0.0

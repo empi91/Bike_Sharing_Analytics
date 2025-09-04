@@ -90,6 +90,7 @@ project_root/
 - **Unit Tests**: Test individual functions and methods in isolation
 - **Integration Tests**: Test component interactions and database operations
 - **API Tests**: Test all endpoints with various scenarios (success, validation errors, edge cases)
+-- **Testing Framework**: Use unittest as only testing framework in this project
 
 ### Testing Framework (unittest)
 ```python

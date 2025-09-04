@@ -9,3 +9,6 @@ Follow these rules in every response:
 6. Apply KISS (Keep It Simple, Stupid) and DRY (Don’t Repeat Yourself) principles in all solutions.
 7. Default to clarity over cleverness. If something is unclear, ask questions before generating code.
 8. Provide minimal, working code examples – not abstract theory.
+9. Do only single step from todo.md at the time.
+10. After every completed step stop, explain me what you did and why and ask for next steps.
+11. For every step guide me through the process in detailed way. 
