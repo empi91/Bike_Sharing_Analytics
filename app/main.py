@@ -15,6 +15,7 @@ from fastapi.responses import JSONResponse
 
 from app.core.config import settings
 from app.core.database import db
+from app.routers import stations, internal
 
 
 # Configure logging
@@ -96,6 +97,10 @@ def create_application() -> FastAPI:
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             content={"detail": "Internal server error"}
         )
+    
+    # Include API routers
+    app.include_router(stations.router)
+    app.include_router(internal.router)
     
     return app
 

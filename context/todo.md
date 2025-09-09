@@ -11,23 +11,23 @@
 ### Project Setup & Foundation
 - [x] Create GitHub repository `bike-station-reliability` 
 - [x] Set up Python project structure with `requirements.txt`
-- [ ] Install core dependencies: `FastAPI[all]`, `supabase`, `requests`, `unittest`, `python-dotenv`, `apscheduler`
+- [x] Install core dependencies: `FastAPI[all]`, `supabase`, `requests`, `unittest`, `python-dotenv`, `apscheduler`
 - [x] Create Supabase project and get API keys (free tier is perfect for MVP)
 - [x] Set up `.env` file with Supabase credentials and configuration
-- [ ] Set up basic FastAPI application with health check endpoint (`/api/health`)
+- [x] Set up basic FastAPI application with health check endpoint (`/api/health`)
 
 ### Database Foundation (Supabase)
-- [ ] Create Supabase database tables using SQL editor or Supabase dashboard
-- [ ] Set up all 4 tables: `bike_stations`, `availability_snapshots`, `reliability_scores`, `api_sync_logs`
-- [ ] Configure Row Level Security (RLS) policies for future scalability
-- [ ] Test Supabase Python client connection and basic CRUD operations
-- [ ] Create Pydantic models matching Supabase schema
+- [x] Create Supabase database tables using SQL editor or Supabase dashboard
+- [x] Set up all 4 tables: `bike_stations`, `availability_snapshots`, `reliability_scores`, `api_sync_logs`
+- [x] Configure Row Level Security (RLS) policies for future scalability
+- [x] Test Supabase Python client connection and basic CRUD operations
+- [x] Create Pydantic models matching Supabase schema
 - [ ] Test database connection and basic queries from FastAPI
 
 ### Initial API Setup
-- [ ] Create FastAPI app structure with routers (`/api/stations/`, `/api/internal/`)
-- [ ] Implement basic error handling and response models
-- [ ] Set up environment configuration for different stages (dev/prod)
+- [x] Create FastAPI app structure with routers (`/api/stations/`, `/api/internal/`)
+- [x] Implement basic error handling and response models
+- [x] Set up environment configuration for different stages (dev/prod)
 
 ---
 
@@ -35,9 +35,7 @@
 
 ### Core Backend Development
 - [ ] Research target city bike API - recommend **General Bikeshare Feed Specification (GBFS)** 
-  - NYC Citi Bike: https://gbfs.citibikenyc.com/gbfs/gbfs.json
-  - DC Capital Bikeshare: https://gbfs.capitalbikeshare.com/gbfs/gbfs.json
-  - Choose one major city for MVP
+  - Gdańsk MEVO bike system (https://rowermevo.pl/open-data/realtime)
 - [ ] Build bike API client class with error handling, rate limiting, and async support
 - [ ] Implement station data fetching and initial Supabase seeding
 - [ ] Create availability snapshot collection function with Supabase batch inserts
@@ -45,14 +43,14 @@
 - [ ] Build background task scheduler using `APScheduler` for 5-minute intervals
 
 ### API Endpoints (MVP Core)
-- [ ] Implement `GET /api/stations/nearby` with address geocoding 
-  - Use **Nominatim** (OpenStreetMap) - free, no API key required
-  - Integrate with Supabase PostGIS for distance calculations
-- [ ] Build `GET /api/stations/{station_id}` endpoint
-- [ ] Create `GET /api/stations/{station_id}/reliability` with hourly timeline data
-- [ ] Add comprehensive error handling and proper HTTP status codes
-- [ ] Implement Pydantic models for request/response validation
-- [ ] Add API key authentication for internal endpoints
+- [x] Implement `GET /api/stations/nearby` with basic distance calculation
+  - [ ] Add **Nominatim** (OpenStreetMap) address geocoding - free, no API key required
+  - [ ] Upgrade to Supabase PostGIS for more accurate distance calculations
+- [x] Build `GET /api/stations/{station_id}` endpoint
+- [x] Create `GET /api/stations/{station_id}/reliability` with hourly timeline data
+- [x] Add comprehensive error handling and proper HTTP status codes
+- [x] Implement Pydantic models for request/response validation
+- [x] Add API key authentication for internal endpoints
 
 ### Simple Frontend (Vanilla JS - No Framework)
 - [ ] Create simple HTML/CSS/JavaScript frontend (single page application)
