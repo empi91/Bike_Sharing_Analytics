@@ -128,6 +128,29 @@ class StationRepository:
             logger.error(f"Failed to fetch station by external ID {external_id}: {str(e)}")
             raise Exception(f"Database error: {str(e)}")
     
+    async def get_stations_without_address(self) -> List[BikeStation]:
+        """
+        Get stations that don't have address information.
+        
+        Returns:
+            List[BikeStation]: Stations without addresses
+        """
+        try:
+            result = (
+                self.db.client.table('bike_stations')
+                .select('*')
+                .or_('address.is.null,address.eq.')
+                .execute()
+            )
+            
+            stations = [BikeStation(**station) for station in result.data]
+            logger.info(f"Found {len(stations)} stations without addresses")
+            return stations
+            
+        except Exception as e:
+            logger.error(f"Failed to fetch stations without addresses: {str(e)}")
+            raise Exception(f"Database error: {str(e)}")
+    
     async def create_station(self, station_data: BikeStationCreate) -> BikeStation:
         """
         Create a new bike station.

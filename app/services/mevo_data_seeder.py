@@ -220,6 +220,7 @@ class MevoDataSeeder:
                     station_data = BikeStationCreate(
                         external_station_id=mevo_station.station_id,
                         name=mevo_station.name,
+                        address=mevo_station.address,  # Include address from MEVO API
                         latitude=Decimal(str(mevo_station.lat)),
                         longitude=Decimal(str(mevo_station.lon)),
                         total_docks=mevo_station.capacity,  # Virtual station capacity
@@ -255,6 +256,7 @@ class MevoDataSeeder:
                     from app.schemas.station import BikeStationUpdate
                     update_data = BikeStationUpdate(
                         name=station_data.name,
+                        address=station_data.address,  # Include address in updates
                         latitude=station_data.latitude,
                         longitude=station_data.longitude,
                         total_docks=station_data.total_docks,
@@ -299,6 +301,7 @@ class MevoDataSeeder:
             station_data = BikeStationCreate(
                 external_station_id=mevo_station.station_id,
                 name=mevo_station.name,
+                address=mevo_station.address,  # Include address from MEVO API
                 latitude=Decimal(str(mevo_station.lat)),
                 longitude=Decimal(str(mevo_station.lon)),
                 total_docks=mevo_station.capacity,  # Virtual station capacity
@@ -310,6 +313,7 @@ class MevoDataSeeder:
                 from app.schemas.station import BikeStationUpdate
                 update_data = BikeStationUpdate(
                     name=station_data.name,
+                    address=station_data.address,  # Include address in updates
                     latitude=station_data.latitude,
                     longitude=station_data.longitude,
                     total_docks=station_data.total_docks,

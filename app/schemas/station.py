@@ -33,6 +33,7 @@ class BikeStationBase(BaseModel):
     """Base schema for bike station data."""
     external_station_id: str = Field(..., max_length=100, description="Station ID from external API")
     name: str = Field(..., max_length=255, description="Human-readable station name")
+    address: Optional[str] = Field(None, description="Station address from external API")
     latitude: Decimal = Field(..., ge=-90, le=90, description="Station latitude coordinate")
     longitude: Decimal = Field(..., ge=-180, le=180, description="Station longitude coordinate")
     total_docks: int = Field(..., gt=0, description="Total number of bike docks at station")
@@ -47,6 +48,7 @@ class BikeStationCreate(BikeStationBase):
 class BikeStationUpdate(BaseModel):
     """Schema for updating bike station data."""
     name: Optional[str] = Field(None, max_length=255)
+    address: Optional[str] = Field(None, description="Station address from external API")
     latitude: Optional[Decimal] = Field(None, ge=-90, le=90)
     longitude: Optional[Decimal] = Field(None, ge=-180, le=180)
     total_docks: Optional[int] = Field(None, gt=0)
