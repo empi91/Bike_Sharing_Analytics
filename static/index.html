@@ -268,7 +268,7 @@
                     </div>
                     <div class="detail-item">
                         <div class="detail-label">Capacity</div>
-                        <div class="detail-value">${station.capacity}</div>
+                        <div class="detail-value">${station.total_docks}</div>
                     </div>
                     <div class="detail-item">
                         <div class="detail-label">Status</div>
@@ -311,7 +311,26 @@
                                 const bikes = snapshot.available_bikes || 0;
                                 const snapshotClass = bikes > 5 ? 'bikes-available' : 
                                                    bikes > 0 ? 'bikes-low' : 'bikes-none';
-                                const status = index === 0 ? 'Latest' : `${index + 1} hours ago`;
+                                
+                                // Calculate real time difference
+                                const now = new Date();
+                                const snapshotTime = new Date(snapshot.timestamp);
+                                const diffMs = now - snapshotTime;
+                                const diffMinutes = Math.floor(diffMs / (1000 * 60));
+                                const diffHours = Math.floor(diffMs / (1000 * 60 * 60));
+                                const diffDays = Math.floor(diffMs / (1000 * 60 * 60 * 24));
+                                
+                                let status;
+                                if (diffMinutes < 1) {
+                                    status = 'Just now';
+                                } else if (diffMinutes < 60) {
+                                    status = `${diffMinutes} minute${diffMinutes !== 1 ? 's' : ''} ago`;
+                                } else if (diffHours < 24) {
+                                    status = `${diffHours} hour${diffHours !== 1 ? 's' : ''} ago`;
+                                } else {
+                                    status = `${diffDays} day${diffDays !== 1 ? 's' : ''} ago`;
+                                }
+                                
                                 return `
                                     <tr>
                                         <td>${new Date(snapshot.timestamp).toLocaleString()}</td>
