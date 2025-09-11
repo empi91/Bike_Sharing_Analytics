@@ -141,7 +141,13 @@ class StationRepository:
         try:
             logger.info(f"Creating new station: {station_data.name}")
             
-            result = self.db.client.table('bike_stations').insert(station_data.model_dump()).execute()
+            # Convert to dict with proper JSON serialization
+            station_dict = station_data.model_dump()
+            # Convert Decimal to float for JSON serialization
+            station_dict['latitude'] = float(station_dict['latitude'])
+            station_dict['longitude'] = float(station_dict['longitude'])
+            
+            result = self.db.client.table('bike_stations').insert(station_dict).execute()
             
             if result.data:
                 created_station = BikeStation(**result.data[0])
@@ -205,6 +211,12 @@ class StationRepository:
             
             # Only include non-None fields in update
             update_data = {k: v for k, v in station_data.model_dump().items() if v is not None}
+            
+            # Convert Decimal to float for JSON serialization
+            if 'latitude' in update_data and isinstance(update_data['latitude'], Decimal):
+                update_data['latitude'] = float(update_data['latitude'])
+            if 'longitude' in update_data and isinstance(update_data['longitude'], Decimal):
+                update_data['longitude'] = float(update_data['longitude'])
             
             if not update_data:
                 logger.warning("No fields to update")
