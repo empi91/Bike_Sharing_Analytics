@@ -207,14 +207,13 @@ async def trigger_availability_sync(
         # Get all active stations
         active_stations = await repo.get_all_stations(active_only=True)
         
-        # TODO: Implement actual availability data collection
-        # This would typically:
-        # 1. For each active station, fetch current availability from external API
-        # 2. Create availability snapshots
-        # 3. Store in database
+        # Use the actual MEVO data seeder to collect availability data
+        from app.services.mevo_data_seeder import MevoDataSeeder
+        seeder = MevoDataSeeder(db)
         
-        # Simulate creating snapshots for all stations
-        snapshots_created = len(active_stations)
+        # Collect actual availability data
+        result = await seeder.sync_station_status()
+        snapshots_created = result.get('snapshots_created', 0)
         
         # Update sync log data
         sync_log_data.stations_updated = len(active_stations)

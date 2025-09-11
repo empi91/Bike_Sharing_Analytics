@@ -332,8 +332,8 @@ class StationRepository:
             for snapshot in snapshots_data:
                 snapshot_dict = snapshot.model_dump()
                 # Convert datetime to ISO string for JSON serialization
-                if 'snapshot_timestamp' in snapshot_dict and snapshot_dict['snapshot_timestamp']:
-                    snapshot_dict['snapshot_timestamp'] = snapshot_dict['snapshot_timestamp'].isoformat()
+                if 'timestamp' in snapshot_dict and snapshot_dict['timestamp']:
+                    snapshot_dict['timestamp'] = snapshot_dict['timestamp'].isoformat()
                 insert_data.append(snapshot_dict)
             
             result = self.db.client.table('availability_snapshots').insert(insert_data).execute()
