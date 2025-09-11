@@ -378,3 +378,56 @@ async def get_station_reliability(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail="Failed to retrieve reliability data"
         )
+
+
+@router.get("/{station_id}/availability", response_model=List[AvailabilitySnapshot])
+async def get_station_availability_history(
+    station_id: int,
+    limit: int = Query(10, ge=1, le=50, description="Maximum number of snapshots to return"),
+    repo: StationRepository = Depends(get_station_repository)
+):
+    """
+    Get recent availability history for a specific station.
+    
+    This endpoint returns the most recent availability snapshots
+    for a station, showing historical bike availability data.
+    
+    Args:
+        station_id: Unique station identifier
+        limit: Maximum number of snapshots to return (1-50)
+        repo: Station repository dependency
+        
+    Returns:
+        List[AvailabilitySnapshot]: Recent availability snapshots
+        
+    Raises:
+        HTTPException: If station not found or database operation fails
+        
+    Example:
+        GET /api/stations/1/availability?limit=10
+    """
+    try:
+        logger.info(f"Fetching availability history for station {station_id} (limit={limit})")
+        
+        # Verify station exists
+        station = await repo.get_station_by_id(station_id)
+        if not station:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail=f"Station with ID {station_id} not found"
+            )
+        
+        # Get recent snapshots
+        snapshots = await repo.get_recent_snapshots(station_id, limit=limit)
+        
+        logger.info(f"Retrieved {len(snapshots)} availability snapshots for station {station_id}")
+        return snapshots
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Failed to fetch availability history for station {station_id}: {str(e)}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Failed to retrieve availability history"
+        )

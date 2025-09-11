@@ -11,7 +11,8 @@ from typing import AsyncGenerator
 
 from fastapi import FastAPI, HTTPException, status
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import JSONResponse
+from fastapi.responses import JSONResponse, FileResponse
+from fastapi.staticfiles import StaticFiles
 
 from app.core.config import settings
 from app.core.database import db
@@ -117,6 +118,9 @@ def create_application() -> FastAPI:
     app.include_router(stations.router)
     app.include_router(internal.router)
     
+    # Mount static files
+    app.mount("/static", StaticFiles(directory="static"), name="static")
+    
     return app
 
 
@@ -183,7 +187,18 @@ async def health_check():
 @app.get("/", tags=["Root"])
 async def read_root():
     """
-    Root endpoint with basic API information.
+    Serve the frontend interface.
+    
+    Returns:
+        FileResponse: The main HTML file for the frontend
+    """
+    return FileResponse("static/index.html")
+
+
+@app.get("/api", tags=["API Info"])
+async def api_info():
+    """
+    API information endpoint.
     
     Returns:
         dict: Basic API information and links to documentation
@@ -192,5 +207,6 @@ async def read_root():
         "message": "Bike Station Reliability API",
         "version": "1.0.0",
         "docs": "/docs",
-        "health": "/api/health"
+        "health": "/api/health",
+        "frontend": "/"
     }
