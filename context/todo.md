@@ -34,10 +34,13 @@
 ## This Week (Sept 3-8)
 
 ### Core Backend Development
-- [ ] Research target city bike API - recommend **General Bikeshare Feed Specification (GBFS)** 
-  - Gdańsk MEVO bike system (https://rowermevo.pl/open-data/realtime)
-- [ ] Build bike API client class with error handling, rate limiting, and async support
-- [ ] Implement station data fetching and initial Supabase seeding
+- [x] Research target city bike API - **MEVO Gdańsk GBFS API**
+  - Discovery: https://gbfs.urbansharing.com/rowermevo.pl/gbfs.json
+  - Station Info: https://gbfs.urbansharing.com/rowermevo.pl/station_information.json
+  - Station Status: https://gbfs.urbansharing.com/rowermevo.pl/station_status.json
+  - System Info: https://gbfs.urbansharing.com/rowermevo.pl/system_information.json
+- [x] Build MEVO API client class with error handling, rate limiting, and async support
+- [ ] Implement MEVO station data fetching and initial Supabase seeding with virtual station areas
 - [ ] Create availability snapshot collection function with Supabase batch inserts
 - [ ] Write reliability score calculation algorithm (30-day rolling window using Supabase database functions)
 - [ ] Build background task scheduler using `APScheduler` for 5-minute intervals

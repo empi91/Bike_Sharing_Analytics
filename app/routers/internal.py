@@ -23,6 +23,7 @@ from app.schemas.station import (
     AvailabilitySnapshot,
     ErrorResponse,
 )
+from app.services.background_scheduler import get_scheduler
 
 logger = logging.getLogger(__name__)
 
@@ -311,14 +312,13 @@ async def trigger_reliability_calculation(
         else:
             stations_to_process = await repo.get_all_stations(active_only=True)
         
-        # TODO: Implement actual reliability calculation
-        # This would typically:
-        # 1. For each station, get availability snapshots from the last N days
-        # 2. Group by hour and day type (weekday/weekend)
-        # 3. Calculate reliability percentage for each hour/day_type combination
-        # 4. Update reliability_scores table
+        # Calculate reliability scores using the repository method
+        calculation_result = await repo.calculate_reliability_scores(
+            station_id=station_id,
+            days_back=days_back
+        )
         
-        scores_calculated = len(stations_to_process) * 24 * 2  # 24 hours * 2 day types per station
+        scores_calculated = calculation_result['scores_calculated']
         
         end_time = datetime.utcnow()
         response_time_ms = int((end_time - start_time).total_seconds() * 1000)
@@ -326,12 +326,21 @@ async def trigger_reliability_calculation(
         result = {
             "status": "success",
             "message": "Reliability calculation completed successfully",
-            "stations_processed": len(stations_to_process),
+            "stations_processed": calculation_result['stations_processed'],
             "scores_calculated": scores_calculated,
             "days_back": days_back,
             "response_time_ms": response_time_ms,
-            "timestamp": start_time.isoformat()
+            "timestamp": start_time.isoformat(),
+            "data_period": {
+                "start": calculation_result['data_period_start'],
+                "end": calculation_result['data_period_end']
+            }
         }
+        
+        # Update status if there were errors
+        if calculation_result['errors']:
+            result['errors'] = calculation_result['errors']
+            result['status'] = 'partial' if scores_calculated > 0 else 'failed'
         
         logger.info(f"Reliability calculation completed: {scores_calculated} scores calculated")
         return result
@@ -428,4 +437,100 @@ async def get_sync_health(
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Failed to check sync health: {str(e)}"
+        )
+
+
+@router.get("/scheduler/status", response_model=Dict[str, Any])
+async def get_scheduler_status(
+    authorized: bool = Depends(verify_api_key)
+):
+    """
+    Get the status of the background task scheduler.
+    
+    This endpoint provides information about the background scheduler,
+    including running jobs and next execution times.
+    
+    Args:
+        authorized: API key verification dependency
+        
+    Returns:
+        Dict[str, Any]: Scheduler status and job information
+        
+    Example:
+        GET /api/internal/scheduler/status
+        Authorization: Bearer your_api_key
+    """
+    try:
+        logger.info("Getting scheduler status")
+        
+        scheduler = get_scheduler()
+        status_info = await scheduler.get_status()
+        
+        return {
+            "scheduler": status_info,
+            "configuration": {
+                "sync_interval_minutes": settings.sync_interval_minutes,
+                "reliability_calculation_hour": settings.reliability_calculation_hour
+            },
+            "timestamp": datetime.utcnow().isoformat()
+        }
+        
+    except Exception as e:
+        logger.error(f"Failed to get scheduler status: {str(e)}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to get scheduler status: {str(e)}"
+        )
+
+
+@router.post("/scheduler/jobs/{job_id}/trigger", response_model=Dict[str, Any])
+async def trigger_scheduler_job(
+    job_id: str,
+    authorized: bool = Depends(verify_api_key)
+):
+    """
+    Manually trigger a specific background job.
+    
+    This endpoint allows manual execution of background tasks for testing
+    or immediate execution needs.
+    
+    Args:
+        job_id: ID of the job to trigger (station_status_collection, reliability_calculation, data_maintenance)
+        authorized: API key verification dependency
+        
+    Returns:
+        Dict[str, Any]: Job execution results
+        
+    Example:
+        POST /api/internal/scheduler/jobs/station_status_collection/trigger
+        Authorization: Bearer your_api_key
+    """
+    try:
+        logger.info(f"Manually triggering job: {job_id}")
+        
+        # Validate job_id
+        valid_jobs = ['station_status_collection', 'reliability_calculation', 'data_maintenance']
+        if job_id not in valid_jobs:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=f"Invalid job ID. Valid options: {', '.join(valid_jobs)}"
+            )
+        
+        scheduler = get_scheduler()
+        result = await scheduler.trigger_job(job_id)
+        
+        if result['success']:
+            logger.info(f"Job {job_id} executed successfully")
+        else:
+            logger.error(f"Job {job_id} execution failed: {result.get('error')}")
+        
+        return result
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Failed to trigger job {job_id}: {str(e)}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to trigger job: {str(e)}"
         )

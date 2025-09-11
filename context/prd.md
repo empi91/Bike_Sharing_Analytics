@@ -161,6 +161,11 @@ This function helps daily bike commuters who are considering relocating by provi
 - Edge functions for complex database operations
 - Automatic API generation via PostgREST (backup option)
 
+**Environemnt**
+- Project will be developed using WSL on Windows
+- All terminal commands, configs and functions have to work properly from WSL
+- Project will be hosted from Linux-based server
+
 ---
 
 ## 5. DONE Criteria

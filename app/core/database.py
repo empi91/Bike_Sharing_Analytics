@@ -31,22 +31,23 @@ class SupabaseClient:
     @property
     def client(self) -> Client:
         """
-        Get the Supabase client instance.
+        Get the Supabase client instance with service role privileges.
         
         Creates the client on first access (lazy initialization).
+        Uses service role key for full database access.
         
         Returns:
-            Client: Configured Supabase client
+            Client: Configured Supabase client with service role privileges
             
         Raises:
             Exception: If client creation fails
         """
         if self._client is None:
             try:
-                logger.info("Creating Supabase client connection")
+                logger.info("Creating Supabase client connection with service role")
                 self._client = create_client(
                     supabase_url=settings.supabase_url,
-                    supabase_key=settings.supabase_anon_key
+                    supabase_key=settings.supabase_service_role_key
                 )
                 logger.info("Supabase client created successfully")
             except Exception as e:

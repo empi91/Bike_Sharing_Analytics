@@ -16,6 +16,7 @@ from fastapi.responses import JSONResponse
 from app.core.config import settings
 from app.core.database import db
 from app.routers import stations, internal
+from app.services.background_scheduler import start_background_tasks, stop_background_tasks
 
 
 # Configure logging
@@ -54,10 +55,24 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     except Exception as e:
         logger.error(f"Database connection error during startup: {str(e)}")
     
+    # Start background tasks
+    try:
+        await start_background_tasks()
+        logger.info("Background tasks started successfully")
+    except Exception as e:
+        logger.error(f"Failed to start background tasks: {str(e)}")
+    
     yield
     
     # Shutdown
     logger.info("Shutting down Bike Station Reliability API")
+    
+    # Stop background tasks
+    try:
+        await stop_background_tasks()
+        logger.info("Background tasks stopped successfully")
+    except Exception as e:
+        logger.error(f"Failed to stop background tasks: {str(e)}")
 
 
 def create_application() -> FastAPI:

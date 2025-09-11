@@ -154,6 +154,41 @@ class StationRepository:
             logger.error(f"Failed to create station: {str(e)}")
             raise Exception(f"Database error: {str(e)}")
     
+    async def create_stations_batch(self, stations_data: List[BikeStationCreate]) -> List[BikeStation]:
+        """
+        Create multiple bike stations in a batch operation.
+        
+        Args:
+            stations_data: List of station data to create
+            
+        Returns:
+            List[BikeStation]: List of created stations with generated IDs
+        """
+        try:
+            logger.info(f"Creating {len(stations_data)} stations in batch")
+            
+            # Convert to dicts for Supabase with proper JSON serialization
+            insert_data = []
+            for station in stations_data:
+                station_dict = station.model_dump()
+                # Convert Decimal to float for JSON serialization
+                station_dict['latitude'] = float(station_dict['latitude'])
+                station_dict['longitude'] = float(station_dict['longitude'])
+                insert_data.append(station_dict)
+            
+            result = self.db.client.table('bike_stations').insert(insert_data).execute()
+            
+            if result.data:
+                created_stations = [BikeStation(**station) for station in result.data]
+                logger.info(f"Created {len(created_stations)} stations in batch")
+                return created_stations
+            
+            raise Exception("Failed to create stations - no data returned")
+            
+        except Exception as e:
+            logger.error(f"Failed to create stations batch: {str(e)}")
+            raise Exception(f"Database error: {str(e)}")
+    
     async def update_station(self, station_id: int, station_data: BikeStationUpdate) -> Optional[BikeStation]:
         """
         Update an existing bike station.
@@ -267,6 +302,41 @@ class StationRepository:
             logger.error(f"Failed to create availability snapshot: {str(e)}")
             raise Exception(f"Database error: {str(e)}")
     
+    async def create_availability_snapshots_batch(self, snapshots_data: List[AvailabilitySnapshotCreate]) -> List[AvailabilitySnapshot]:
+        """
+        Create multiple availability snapshots in a batch operation.
+        
+        Args:
+            snapshots_data: List of snapshot data to create
+            
+        Returns:
+            List[AvailabilitySnapshot]: List of created snapshots
+        """
+        try:
+            logger.info(f"Creating {len(snapshots_data)} availability snapshots in batch")
+            
+            # Convert to dicts for Supabase with proper JSON serialization
+            insert_data = []
+            for snapshot in snapshots_data:
+                snapshot_dict = snapshot.model_dump()
+                # Convert datetime to ISO string for JSON serialization
+                if 'snapshot_timestamp' in snapshot_dict and snapshot_dict['snapshot_timestamp']:
+                    snapshot_dict['snapshot_timestamp'] = snapshot_dict['snapshot_timestamp'].isoformat()
+                insert_data.append(snapshot_dict)
+            
+            result = self.db.client.table('availability_snapshots').insert(insert_data).execute()
+            
+            if result.data:
+                created_snapshots = [AvailabilitySnapshot(**snapshot) for snapshot in result.data]
+                logger.info(f"Created {len(created_snapshots)} snapshots in batch")
+                return created_snapshots
+            
+            raise Exception("Failed to create snapshots - no data returned")
+            
+        except Exception as e:
+            logger.error(f"Failed to create snapshots batch: {str(e)}")
+            raise Exception(f"Database error: {str(e)}")
+    
     async def get_recent_snapshots(self, station_id: int, limit: int = 10) -> List[AvailabilitySnapshot]:
         """
         Get recent availability snapshots for a station.
@@ -327,6 +397,202 @@ class StationRepository:
             logger.error(f"Failed to fetch reliability scores for station {station_id}: {str(e)}")
             raise Exception(f"Database error: {str(e)}")
     
+    async def calculate_reliability_scores(
+        self, 
+        station_id: Optional[int] = None, 
+        days_back: int = 30
+    ) -> Dict[str, Any]:
+        """
+        Calculate reliability scores for stations based on historical data.
+        
+        Args:
+            station_id: Calculate for specific station (None = all stations)
+            days_back: Number of days of historical data to analyze
+            
+        Returns:
+            Dict with calculation results and statistics
+        """
+        try:
+            from datetime import date, timedelta
+            
+            # Calculate date range
+            end_date = date.today()
+            start_date = end_date - timedelta(days=days_back)
+            
+            logger.info(f"Calculating reliability scores for {days_back} days ({start_date} to {end_date})")
+            
+            # Get stations to process
+            if station_id:
+                stations = [await self.get_station_by_id(station_id)]
+                stations = [s for s in stations if s is not None]
+            else:
+                stations = await self.get_all_stations(active_only=True)
+            
+            scores_calculated = 0
+            errors = []
+            
+            for station in stations:
+                try:
+                    # Calculate scores for this station
+                    station_scores = await self._calculate_station_reliability(
+                        station.id, start_date, end_date
+                    )
+                    scores_calculated += len(station_scores)
+                    
+                except Exception as e:
+                    error_msg = f"Error calculating reliability for station {station.id}: {str(e)}"
+                    logger.error(error_msg)
+                    errors.append(error_msg)
+            
+            result = {
+                'stations_processed': len(stations),
+                'scores_calculated': scores_calculated,
+                'data_period_start': start_date.isoformat(),
+                'data_period_end': end_date.isoformat(),
+                'errors': errors,
+                'success': len(errors) == 0
+            }
+            
+            logger.info(f"Reliability calculation completed: {result}")
+            return result
+            
+        except Exception as e:
+            logger.error(f"Failed to calculate reliability scores: {str(e)}")
+            raise Exception(f"Reliability calculation error: {str(e)}")
+    
+    async def _calculate_station_reliability(
+        self, 
+        station_id: int, 
+        start_date: date, 
+        end_date: date
+    ) -> List[ReliabilityScore]:
+        """
+        Calculate reliability scores for a specific station.
+        
+        Args:
+            station_id: Station to calculate for
+            start_date: Start of data period
+            end_date: End of data period
+            
+        Returns:
+            List of calculated reliability scores
+        """
+        try:
+            from app.schemas.station import ReliabilityScoreCreate
+            from datetime import datetime
+            
+            # Get availability snapshots for the period using Supabase client
+            result = (
+                self.db.client.table('availability_snapshots')
+                .select('hour, day_of_week, available_bikes, timestamp')
+                .eq('station_id', station_id)
+                .gte('timestamp', f"{start_date}T00:00:00")
+                .lte('timestamp', f"{end_date}T23:59:59")
+                .execute()
+            )
+            
+            if not result.data:
+                logger.info(f"No availability data found for station {station_id} in period {start_date} to {end_date}")
+                return []
+            
+            # Group data by hour and day_type in Python
+            grouped_data = {}
+            for row in result.data:
+                hour = row['hour']
+                day_type = 'weekday' if row['day_of_week'] in [1, 2, 3, 4, 5] else 'weekend'
+                key = (hour, day_type)
+                
+                if key not in grouped_data:
+                    grouped_data[key] = {
+                        'total_snapshots': 0,
+                        'bikes_available_count': 0,
+                        'total_bikes': 0
+                    }
+                
+                grouped_data[key]['total_snapshots'] += 1
+                grouped_data[key]['total_bikes'] += row['available_bikes']
+                if row['available_bikes'] > 0:
+                    grouped_data[key]['bikes_available_count'] += 1
+            
+            calculated_scores = []
+            
+            # Calculate reliability scores for each hour/day_type combination
+            for (hour, day_type), data in grouped_data.items():
+                # Skip if sample size is too small
+                if data['total_snapshots'] < 5:
+                    continue
+                
+                # Calculate reliability percentage
+                reliability_percentage = (data['bikes_available_count'] / data['total_snapshots']) * 100
+                avg_bikes = data['total_bikes'] / data['total_snapshots']
+                
+                # Create reliability score
+                score_data = ReliabilityScoreCreate(
+                    station_id=station_id,
+                    hour=hour,
+                    day_type=DayType(day_type),
+                    reliability_percentage=Decimal(f"{reliability_percentage:.2f}"),
+                    avg_available_bikes=Decimal(f"{avg_bikes:.2f}"),
+                    sample_size=data['total_snapshots'],
+                    data_period_start=start_date,
+                    data_period_end=end_date
+                )
+                
+                # Insert or update the score
+                await self._upsert_reliability_score(score_data)
+                calculated_scores.append(score_data)
+            
+            logger.info(f"Calculated {len(calculated_scores)} reliability scores for station {station_id}")
+            return calculated_scores
+            
+        except Exception as e:
+            logger.error(f"Failed to calculate station reliability for {station_id}: {str(e)}")
+            raise
+    
+    async def _upsert_reliability_score(self, score_data: 'ReliabilityScoreCreate') -> None:
+        """
+        Insert or update a reliability score (upsert operation).
+        
+        Args:
+            score_data: Reliability score data to upsert
+        """
+        try:
+            # Check if score already exists
+            existing = (
+                self.db.client.table('reliability_scores')
+                .select('id')
+                .eq('station_id', score_data.station_id)
+                .eq('hour', score_data.hour)
+                .eq('day_type', score_data.day_type.value)
+                .execute()
+            )
+            
+            score_dict = score_data.model_dump()
+            score_dict['day_type'] = score_data.day_type.value  # Convert enum to string
+            
+            if existing.data:
+                # Update existing score
+                result = (
+                    self.db.client.table('reliability_scores')
+                    .update(score_dict)
+                    .eq('id', existing.data[0]['id'])
+                    .execute()
+                )
+            else:
+                # Insert new score
+                result = (
+                    self.db.client.table('reliability_scores')
+                    .insert(score_dict)
+                    .execute()
+                )
+            
+            if not result.data:
+                raise Exception("Upsert operation returned no data")
+                
+        except Exception as e:
+            logger.error(f"Failed to upsert reliability score: {str(e)}")
+            raise
+
     # =====================================================
     # API SYNC LOG OPERATIONS
     # =====================================================
@@ -342,7 +608,17 @@ class StationRepository:
             ApiSyncLog: Created log entry
         """
         try:
-            result = self.db.client.table('api_sync_logs').insert(log_data.model_dump()).execute()
+            # Convert to dict with proper JSON serialization
+            log_dict = log_data.model_dump()
+            # Convert datetime to ISO string for JSON serialization
+            if 'sync_timestamp' in log_dict and log_dict['sync_timestamp']:
+                log_dict['sync_timestamp'] = log_dict['sync_timestamp'].isoformat()
+            if 'start_time' in log_dict and log_dict['start_time']:
+                log_dict['start_time'] = log_dict['start_time'].isoformat()
+            if 'end_time' in log_dict and log_dict['end_time']:
+                log_dict['end_time'] = log_dict['end_time'].isoformat()
+            
+            result = self.db.client.table('api_sync_logs').insert(log_dict).execute()
             
             if result.data:
                 return ApiSyncLog(**result.data[0])

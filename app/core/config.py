@@ -24,7 +24,10 @@ class Settings(BaseSettings):
         environment: Application environment (development, production, test)
         api_key: Internal API key for protected endpoints
         log_level: Logging level
-        city_bike_api_url: External city bike API URL
+        mevo_gbfs_discovery_url: MEVO Gdańsk GBFS discovery URL
+        mevo_system_info_url: MEVO system information endpoint
+        mevo_station_info_url: MEVO station information endpoint
+        mevo_station_status_url: MEVO station status endpoint
         api_request_timeout: Timeout for external API requests in seconds
         sync_interval_minutes: Background sync interval in minutes
         reliability_calculation_hour: Hour of day to calculate reliability scores
@@ -40,10 +43,22 @@ class Settings(BaseSettings):
     api_key: str = Field(..., description="Internal API key for protected endpoints")
     log_level: str = Field(default="INFO", description="Logging level")
     
-    # External API Configuration
-    city_bike_api_url: str = Field(
-        default="https://gbfs.citibikenyc.com/gbfs/gbfs.json",
-        description="City bike API URL"
+    # External API Configuration - MEVO Gdańsk Bike Sharing System
+    mevo_gbfs_discovery_url: str = Field(
+        default="https://gbfs.urbansharing.com/rowermevo.pl/gbfs.json",
+        description="MEVO Gdańsk GBFS discovery URL"
+    )
+    mevo_system_info_url: str = Field(
+        default="https://gbfs.urbansharing.com/rowermevo.pl/system_information.json",
+        description="MEVO system information endpoint"
+    )
+    mevo_station_info_url: str = Field(
+        default="https://gbfs.urbansharing.com/rowermevo.pl/station_information.json",
+        description="MEVO station information endpoint"
+    )
+    mevo_station_status_url: str = Field(
+        default="https://gbfs.urbansharing.com/rowermevo.pl/station_status.json",
+        description="MEVO station status (real-time availability) endpoint"
     )
     api_request_timeout: int = Field(default=30, description="API request timeout in seconds")
     
@@ -59,6 +74,7 @@ class Settings(BaseSettings):
         env_file = ".env"
         env_file_encoding = "utf-8"
         case_sensitive = False
+        extra = "ignore"  # Ignore extra environment variables not defined in model
 
 
 def get_settings() -> Settings:
