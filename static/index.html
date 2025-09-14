@@ -135,6 +135,55 @@
             color: #dc3545;
             font-weight: bold;
         }
+        .timeslot-selector {
+            margin: 20px 0;
+            text-align: center;
+        }
+        .timeslot-buttons {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
+            gap: 10px;
+            margin-top: 15px;
+        }
+        .timeslot-btn {
+            padding: 12px 16px;
+            border: 2px solid #e0e0e0;
+            border-radius: 8px;
+            background: white;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            font-weight: 500;
+            color: #666;
+        }
+        .timeslot-btn:hover {
+            border-color: #007bff;
+            color: #007bff;
+            transform: translateY(-2px);
+            box-shadow: 0 4px 8px rgba(0,123,255,0.2);
+        }
+        .timeslot-btn.active {
+            background: #007bff;
+            border-color: #007bff;
+            color: white;
+            transform: translateY(-2px);
+            box-shadow: 0 4px 12px rgba(0,123,255,0.3);
+        }
+        .timeslot-btn .time-range {
+            font-size: 12px;
+            opacity: 0.8;
+            margin-top: 2px;
+        }
+        .filtered-snapshots {
+            margin-top: 20px;
+        }
+        .no-data-message {
+            text-align: center;
+            color: #666;
+            font-style: italic;
+            padding: 20px;
+            background: #f8f9fa;
+            border-radius: 5px;
+        }
     </style>
 </head>
 <body>
@@ -193,7 +242,7 @@
                 // Get station details and recent availability
                 const [stationDetails, availabilityData] = await Promise.all([
                     getStationDetails(stationId),
-                    getRecentAvailability(stationId, 10)
+                    getRecentAvailability(stationId, 50)  // Get more snapshots for better time distribution (max allowed)
                 ]);
 
                 displayStationData(stationDetails, availabilityData);
@@ -274,67 +323,156 @@
                 </div>
             `;
 
-            // Display availability data
+            // Display availability data with timeslot selector
             const availabilityDiv = document.getElementById('availabilityData');
             if (availabilityData && availabilityData.length > 0) {
-                // Get the most recent snapshot for current status
-                const mostRecent = availabilityData[0];
-                const bikesAvailable = mostRecent.available_bikes || 0;
-                const bikesClass = bikesAvailable > 5 ? 'bikes-available' : 
-                                 bikesAvailable > 0 ? 'bikes-low' : 'bikes-none';
-                
                 availabilityDiv.innerHTML = `
-                    <h3>Recent Availability History (Last ${availabilityData.length} snapshots)</h3>
-                    <table class="availability-table">
-                        <thead>
-                            <tr>
-                                <th>Timestamp</th>
-                                <th>Bikes Available</th>
-                                <th>Status</th>
-                            </tr>
-                        </thead>
-                        <tbody>
-                            ${availabilityData.map((snapshot, index) => {
-                                const bikes = snapshot.available_bikes || 0;
-                                const snapshotClass = bikes > 5 ? 'bikes-available' : 
-                                                   bikes > 0 ? 'bikes-low' : 'bikes-none';
-                                
-                                // Calculate real time difference
-                                const now = new Date();
-                                const snapshotTime = new Date(snapshot.timestamp);
-                                const diffMs = now - snapshotTime;
-                                const diffMinutes = Math.floor(diffMs / (1000 * 60));
-                                const diffHours = Math.floor(diffMs / (1000 * 60 * 60));
-                                const diffDays = Math.floor(diffMs / (1000 * 60 * 60 * 24));
-                                
-                                let status;
-                                if (diffMinutes < 1) {
-                                    status = 'Just now';
-                                } else if (diffMinutes < 60) {
-                                    status = `${diffMinutes} minute${diffMinutes !== 1 ? 's' : ''} ago`;
-                                } else if (diffHours < 24) {
-                                    status = `${diffHours} hour${diffHours !== 1 ? 's' : ''} ago`;
-                                } else {
-                                    status = `${diffDays} day${diffDays !== 1 ? 's' : ''} ago`;
-                                }
-                                
-                                return `
-                                    <tr>
-                                        <td>${new Date(snapshot.timestamp).toLocaleString()}</td>
-                                        <td class="${snapshotClass}">${bikes}</td>
-                                        <td>${status}</td>
-                                    </tr>
-                                `;
-                            }).join('')}
-                        </tbody>
-                    </table>
+                    <div class="timeslot-selector">
+                        <h3>📅 Select Time Period</h3>
+                        <div class="timeslot-buttons">
+                            <button class="timeslot-btn" data-timeslot="night">
+                                🌙 Night<br>
+                                <span class="time-range">22:00 - 06:00</span>
+                            </button>
+                            <button class="timeslot-btn" data-timeslot="morning">
+                                🌅 Morning<br>
+                                <span class="time-range">06:00 - 12:00</span>
+                            </button>
+                            <button class="timeslot-btn" data-timeslot="afternoon">
+                                ☀️ Afternoon<br>
+                                <span class="time-range">12:00 - 18:00</span>
+                            </button>
+                            <button class="timeslot-btn" data-timeslot="evening">
+                                🌆 Evening<br>
+                                <span class="time-range">18:00 - 22:00</span>
+                            </button>
+                        </div>
+                    </div>
+                    <div class="filtered-snapshots" id="filteredSnapshots">
+                        <div class="no-data-message">
+                            Select a time period to view availability history
+                        </div>
+                    </div>
                 `;
+                
+                // Add event listeners for timeslot buttons
+                setupTimeslotButtons(availabilityData);
             } else {
                 availabilityDiv.innerHTML = `
                     <h3>Availability Data</h3>
                     <p><em>No availability data available for this station.</em></p>
                 `;
             }
+        }
+
+        function setupTimeslotButtons(availabilityData) {
+            const buttons = document.querySelectorAll('.timeslot-btn');
+            const filteredSnapshotsDiv = document.getElementById('filteredSnapshots');
+            
+            buttons.forEach(button => {
+                button.addEventListener('click', () => {
+                    // Remove active class from all buttons
+                    buttons.forEach(btn => btn.classList.remove('active'));
+                    // Add active class to clicked button
+                    button.classList.add('active');
+                    
+                    // Get the selected timeslot
+                    const timeslot = button.getAttribute('data-timeslot');
+                    
+                    // Filter snapshots for the selected timeslot
+                    const filteredSnapshots = filterSnapshotsByTimeslot(availabilityData, timeslot);
+                    
+                    // Display filtered snapshots
+                    displayFilteredSnapshots(filteredSnapshots, timeslot);
+                });
+            });
+        }
+        
+        function filterSnapshotsByTimeslot(snapshots, timeslot) {
+            return snapshots.filter(snapshot => {
+                const date = new Date(snapshot.timestamp);
+                const hour = date.getHours();
+                
+                switch (timeslot) {
+                    case 'night':
+                        return hour >= 22 || hour < 6;
+                    case 'morning':
+                        return hour >= 6 && hour < 12;
+                    case 'afternoon':
+                        return hour >= 12 && hour < 18;
+                    case 'evening':
+                        return hour >= 18 && hour < 22;
+                    default:
+                        return false;
+                }
+            }).slice(0, 10); // Get last 10 snapshots for the period
+        }
+        
+        function displayFilteredSnapshots(snapshots, timeslot) {
+            const filteredSnapshotsDiv = document.getElementById('filteredSnapshots');
+            
+            if (snapshots.length === 0) {
+                filteredSnapshotsDiv.innerHTML = `
+                    <div class="no-data-message">
+                        No availability data found for ${timeslot} period
+                    </div>
+                `;
+                return;
+            }
+            
+            const timeslotNames = {
+                'night': '🌙 Night (22:00 - 06:00)',
+                'morning': '🌅 Morning (06:00 - 12:00)',
+                'afternoon': '☀️ Afternoon (12:00 - 18:00)',
+                'evening': '🌆 Evening (18:00 - 22:00)'
+            };
+            
+            filteredSnapshotsDiv.innerHTML = `
+                <h3>${timeslotNames[timeslot]} - Last ${snapshots.length} snapshots</h3>
+                <table class="availability-table">
+                    <thead>
+                        <tr>
+                            <th>Date & Time</th>
+                            <th>Bikes Available</th>
+                            <th>Time Ago</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        ${snapshots.map(snapshot => {
+                            const bikes = snapshot.available_bikes || 0;
+                            const snapshotClass = bikes > 5 ? 'bikes-available' : 
+                                               bikes > 0 ? 'bikes-low' : 'bikes-none';
+                            
+                            // Calculate time difference
+                            const now = new Date();
+                            const snapshotTime = new Date(snapshot.timestamp);
+                            const diffMs = now - snapshotTime;
+                            const diffMinutes = Math.floor(diffMs / (1000 * 60));
+                            const diffHours = Math.floor(diffMs / (1000 * 60 * 60));
+                            const diffDays = Math.floor(diffMs / (1000 * 60 * 60 * 24));
+                            
+                            let timeAgo;
+                            if (diffMinutes < 1) {
+                                timeAgo = 'Just now';
+                            } else if (diffMinutes < 60) {
+                                timeAgo = `${diffMinutes} min ago`;
+                            } else if (diffHours < 24) {
+                                timeAgo = `${diffHours} hr ago`;
+                            } else {
+                                timeAgo = `${diffDays} day${diffDays !== 1 ? 's' : ''} ago`;
+                            }
+                            
+                            return `
+                                <tr>
+                                    <td>${new Date(snapshot.timestamp).toLocaleString()}</td>
+                                    <td class="${snapshotClass}">${bikes}</td>
+                                    <td>${timeAgo}</td>
+                                </tr>
+                            `;
+                        }).join('')}
+                    </tbody>
+                </table>
+            `;
         }
 
         function showLoading(show) {
