@@ -131,6 +131,33 @@ class ReliabilityScore(ReliabilityScoreBase):
 
 
 # =====================================================
+# HOURLY AVAILABILITY AVERAGES SCHEMAS
+# =====================================================
+
+class HourlyAvailabilityAverageBase(BaseModel):
+    """Base schema for hourly availability averages."""
+    station_id: int = Field(..., description="Station identifier")
+    hour: int = Field(..., ge=0, le=23, description="Hour of day (0-23)")
+    day_type: DayType = Field(..., description="Type of day (weekday/weekend)")
+    avg_bikes_available: Decimal = Field(..., ge=0, description="Average bikes available during this hour")
+    total_snapshots: int = Field(..., gt=0, description="Total number of snapshots used for calculation")
+
+
+class HourlyAvailabilityAverageCreate(HourlyAvailabilityAverageBase):
+    """Schema for creating hourly availability averages."""
+    pass
+
+
+class HourlyAvailabilityAverage(HourlyAvailabilityAverageBase):
+    """Complete hourly availability average schema for responses."""
+    id: int = Field(..., description="Unique average identifier")
+    last_updated: datetime = Field(..., description="When averages were last updated")
+    created_at: Optional[datetime] = Field(None, description="Record creation timestamp")
+    
+    model_config = ConfigDict(from_attributes=True)
+
+
+# =====================================================
 # API SYNC LOG SCHEMAS
 # =====================================================
 

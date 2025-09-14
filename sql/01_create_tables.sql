@@ -123,8 +123,59 @@ CREATE INDEX idx_api_sync_logs_status ON api_sync_logs(sync_status);
 CREATE INDEX idx_api_sync_logs_recent ON api_sync_logs(sync_timestamp DESC);
 
 -- =====================================================
+-- 5. HOURLY_AVAILABILITY_AVERAGES TABLE
+-- =====================================================
+CREATE TABLE hourly_availability_averages (
+    id BIGSERIAL PRIMARY KEY,
+    station_id BIGINT NOT NULL REFERENCES bike_stations(id) ON DELETE CASCADE,
+    hour SMALLINT NOT NULL CHECK (hour BETWEEN 0 AND 23),
+    day_type TEXT NOT NULL CHECK (day_type IN ('weekday', 'weekend')),
+    avg_bikes_available DECIMAL(4,2) NOT NULL CHECK (avg_bikes_available >= 0),
+    total_snapshots INTEGER NOT NULL CHECK (total_snapshots > 0),
+    last_updated TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    
+    -- Ensure we don't have duplicate averages for same station/hour/day_type
+    UNIQUE(station_id, hour, day_type)
+);
+
+-- Create indexes for efficient querying
+CREATE INDEX idx_hourly_averages_station ON hourly_availability_averages(station_id);
+CREATE INDEX idx_hourly_averages_lookup ON hourly_availability_averages(station_id, hour, day_type);
+CREATE INDEX idx_hourly_averages_updated ON hourly_availability_averages(last_updated);
+
+-- =====================================================
 -- FUNCTIONS FOR DATA MANAGEMENT
 -- =====================================================
+
+-- Function to calculate hourly averages efficiently
+CREATE OR REPLACE FUNCTION calculate_hourly_averages(station_id_param BIGINT)
+RETURNS TABLE (
+    hour SMALLINT,
+    day_type TEXT,
+    avg_bikes DECIMAL(4,2),
+    total_snapshots INTEGER
+) AS $$
+BEGIN
+    RETURN QUERY
+    SELECT 
+        s.hour,
+        CASE 
+            WHEN s.day_of_week IN (1, 2, 3, 4, 5) THEN 'weekday'
+            ELSE 'weekend'
+        END as day_type,
+        AVG(s.available_bikes) as avg_bikes,
+        COUNT(*)::INTEGER as total_snapshots
+    FROM availability_snapshots s
+    WHERE s.station_id = station_id_param
+    GROUP BY s.hour, 
+        CASE 
+            WHEN s.day_of_week IN (1, 2, 3, 4, 5) THEN 'weekday'
+            ELSE 'weekend'
+        END
+    ORDER BY s.hour;
+END;
+$$ LANGUAGE plpgsql;
 
 -- Function to update the updated_at timestamp
 CREATE OR REPLACE FUNCTION update_updated_at_column()

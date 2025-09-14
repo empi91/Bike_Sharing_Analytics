@@ -62,15 +62,8 @@ class BackgroundScheduler:
             replace_existing=True
         )
         
-        # Add reliability calculation task (daily at configured hour)
-        self.scheduler.add_job(
-            func=self._calculate_reliability_scores,
-            trigger=CronTrigger(hour=settings.reliability_calculation_hour, minute=0),
-            id='reliability_calculation',
-            name='Calculate Daily Reliability Scores',
-            max_instances=1,
-            replace_existing=True
-        )
+        # Note: Hourly averages are now calculated immediately after each data collection
+        # No separate daily task needed - averages are updated every 5 minutes with new data
         
         # Add data maintenance task (weekly on Sunday at 3 AM)
         self.scheduler.add_job(
@@ -88,7 +81,7 @@ class BackgroundScheduler:
         
         logger.info("Background scheduler started successfully")
         logger.info(f"Data collection interval: {settings.sync_interval_minutes} minutes")
-        logger.info(f"Reliability calculation time: {settings.reliability_calculation_hour}:00")
+        logger.info("Hourly averages: Calculated immediately after each data collection")
         
         # Log next execution times
         for job in self.scheduler.get_jobs():
@@ -216,6 +209,9 @@ class BackgroundScheduler:
             
             if result['success']:
                 logger.info(f"Status collection completed: {result['snapshots_created']} snapshots created")
+                
+                # Schedule hourly averages update in background (non-blocking)
+                asyncio.create_task(self._update_hourly_averages_async())
             else:
                 logger.error(f"Status collection had errors: {result['errors']}")
             
@@ -229,37 +225,133 @@ class BackgroundScheduler:
                 'snapshots_created': 0
             }
     
-    async def _calculate_reliability_scores(self) -> dict:
+    async def _update_hourly_averages_async(self) -> None:
         """
-        Calculate reliability scores for all stations.
+        Update hourly averages in background without blocking main operations.
         
-        This task runs daily to update reliability scores based on the
-        last 30 days of availability data.
-        
-        Returns:
-            dict: Calculation results
+        This runs as a separate asyncio task and doesn't block the main scheduler.
         """
         try:
-            logger.info("Starting scheduled reliability score calculation")
+            logger.info("Starting background hourly averages update")
             
             from app.repositories.station_repository import StationRepository
             repo = StationRepository(db)
             
-            result = await repo.calculate_reliability_scores(days_back=30)
+            # Get all active stations
+            stations = await repo.get_all_stations(active_only=True)
+            
+            # Process stations in smaller batches to avoid timeouts
+            batch_size = 10  # Process 10 stations at a time
+            total_batches = (len(stations) + batch_size - 1) // batch_size
+            
+            averages_updated = 0
+            errors = []
+            
+            for batch_num in range(total_batches):
+                start_idx = batch_num * batch_size
+                end_idx = min(start_idx + batch_size, len(stations))
+                batch_stations = stations[start_idx:end_idx]
+                
+                logger.info(f"Processing batch {batch_num + 1}/{total_batches} ({len(batch_stations)} stations)")
+                
+                # Process batch concurrently
+                batch_tasks = []
+                for station in batch_stations:
+                    task = self._update_station_averages(repo, station)
+                    batch_tasks.append(task)
+                
+                # Wait for batch to complete
+                batch_results = await asyncio.gather(*batch_tasks, return_exceptions=True)
+                
+                # Process results
+                for i, result in enumerate(batch_results):
+                    if isinstance(result, Exception):
+                        error_msg = f"Error updating averages for station {batch_stations[i].id}: {str(result)}"
+                        logger.error(error_msg)
+                        errors.append(error_msg)
+                    else:
+                        averages_updated += result.get('averages_calculated', 0)
+                
+                # Small delay between batches to prevent overwhelming the database
+                if batch_num < total_batches - 1:
+                    await asyncio.sleep(1)
+            
+            logger.info(f"Background hourly averages update completed: {averages_updated} averages updated across {len(stations)} stations")
+            
+        except Exception as e:
+            logger.error(f"Background hourly averages update failed: {str(e)}")
+    
+    async def _update_station_averages(self, repo, station) -> dict:
+        """
+        Update averages for a single station.
+        
+        Args:
+            repo: Station repository instance
+            station: Station to update
+            
+        Returns:
+            dict: Update result
+        """
+        try:
+            result = await repo.calculate_hourly_averages(station.id)
+            return result
+        except Exception as e:
+            logger.error(f"Error updating averages for station {station.id}: {str(e)}")
+            raise
+    
+    async def _update_hourly_averages(self) -> dict:
+        """
+        Update hourly availability averages for all stations.
+        
+        This task runs immediately after each availability data collection to keep
+        the hourly averages up to date using ALL historical data.
+        
+        Returns:
+            dict: Update results
+        """
+        try:
+            logger.info("Starting hourly averages update (using ALL historical data)")
+            
+            from app.repositories.station_repository import StationRepository
+            repo = StationRepository(db)
+            
+            # Get all active stations
+            stations = await repo.get_all_stations(active_only=True)
+            
+            averages_updated = 0
+            errors = []
+            
+            # Update averages for each station using ALL historical data
+            for station in stations:
+                try:
+                    result = await repo.calculate_hourly_averages(station.id)
+                    averages_updated += result.get('averages_calculated', 0)
+                    logger.debug(f"Updated {result.get('averages_calculated', 0)} averages for station {station.name} using {result.get('total_snapshots', 0)} total snapshots")
+                except Exception as e:
+                    error_msg = f"Error updating averages for station {station.id}: {str(e)}"
+                    logger.error(error_msg)
+                    errors.append(error_msg)
+            
+            result = {
+                'success': len(errors) == 0,
+                'averages_updated': averages_updated,
+                'stations_processed': len(stations),
+                'errors': errors
+            }
             
             if result['success']:
-                logger.info(f"Reliability calculation completed: {result['scores_calculated']} scores calculated")
+                logger.info(f"Hourly averages update completed: {averages_updated} averages updated across {len(stations)} stations")
             else:
-                logger.error(f"Reliability calculation had errors: {result['errors']}")
+                logger.error(f"Hourly averages update had errors: {errors}")
             
             return result
             
         except Exception as e:
-            logger.error(f"Reliability calculation failed: {str(e)}")
+            logger.error(f"Hourly averages update failed: {str(e)}")
             return {
                 'success': False,
                 'error': str(e),
-                'scores_calculated': 0
+                'averages_updated': 0
             }
     
     async def _perform_data_maintenance(self) -> dict:

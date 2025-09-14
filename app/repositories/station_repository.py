@@ -605,6 +605,12 @@ class StationRepository:
             score_dict = score_data.model_dump()
             score_dict['day_type'] = score_data.day_type.value  # Convert enum to string
             
+            # Convert Decimal to float for JSON serialization
+            if 'reliability_percentage' in score_dict:
+                score_dict['reliability_percentage'] = float(score_dict['reliability_percentage'])
+            if 'avg_available_bikes' in score_dict:
+                score_dict['avg_available_bikes'] = float(score_dict['avg_available_bikes'])
+            
             if existing.data:
                 # Update existing score
                 result = (
@@ -688,3 +694,209 @@ class StationRepository:
         except Exception as e:
             logger.error(f"Failed to fetch recent sync logs: {str(e)}")
             raise Exception(f"Database error: {str(e)}")
+    
+    # =====================================================
+    # HOURLY AVAILABILITY AVERAGES OPERATIONS
+    # =====================================================
+    
+    async def get_hourly_averages(
+        self, 
+        station_id: int, 
+        day_type: Optional[DayType] = None
+    ) -> List['HourlyAvailabilityAverage']:
+        """
+        Get hourly availability averages for a station.
+        
+        Args:
+            station_id: Station identifier
+            day_type: Optional filter by day type
+            
+        Returns:
+            List of hourly availability averages
+        """
+        try:
+            from app.schemas.station import HourlyAvailabilityAverage
+            
+            query = (
+                self.db.client.table('hourly_availability_averages')
+                .select('*')
+                .eq('station_id', station_id)
+                .order('hour')
+            )
+            
+            if day_type:
+                query = query.eq('day_type', day_type.value)
+            
+            result = query.execute()
+            
+            return [HourlyAvailabilityAverage(**avg) for avg in result.data]
+            
+        except Exception as e:
+            logger.error(f"Failed to fetch hourly averages for station {station_id}: {str(e)}")
+            raise Exception(f"Database error: {str(e)}")
+    
+    async def calculate_hourly_averages(self, station_id: int) -> Dict[str, Any]:
+        """
+        Calculate and store hourly availability averages for a station using database aggregation.
+        
+        This method uses SQL aggregation for better performance instead of processing in Python.
+        
+        Args:
+            station_id: Station identifier
+            
+        Returns:
+            Dict with calculation results
+        """
+        try:
+            from app.schemas.station import HourlyAvailabilityAverageCreate
+            
+            logger.debug(f"Calculating hourly averages for station {station_id}")
+            
+            # Use database aggregation for better performance
+            # This query groups by hour and day_type and calculates averages directly in the database
+            result = self.db.client.rpc(
+                'calculate_hourly_averages',
+                {
+                    'station_id_param': station_id
+                }
+            ).execute()
+            
+            if not result.data:
+                logger.info(f"No availability data found for station {station_id}")
+                return {'averages_calculated': 0, 'message': 'No data available'}
+            
+            # Process aggregated results
+            averages_calculated = 0
+            for row in result.data:
+                if row['total_snapshots'] < 5:  # Skip if too few samples
+                    continue
+                
+                # Create average data
+                avg_data = HourlyAvailabilityAverageCreate(
+                    station_id=station_id,
+                    hour=row['hour'],
+                    day_type=DayType(row['day_type']),
+                    avg_bikes_available=Decimal(f"{row['avg_bikes']:.2f}"),
+                    total_snapshots=row['total_snapshots']
+                )
+                
+                # Upsert the average
+                await self._upsert_hourly_average(avg_data)
+                averages_calculated += 1
+            
+            logger.debug(f"Calculated {averages_calculated} hourly averages for station {station_id}")
+            return {
+                'averages_calculated': averages_calculated,
+                'data_period': 'All historical data',
+                'total_snapshots': sum(row['total_snapshots'] for row in result.data)
+            }
+            
+        except Exception as e:
+            # Fallback to Python-based calculation if database function doesn't exist
+            logger.warning(f"Database function failed, falling back to Python calculation: {str(e)}")
+            return await self._calculate_hourly_averages_fallback(station_id)
+    
+    async def _calculate_hourly_averages_fallback(self, station_id: int) -> Dict[str, Any]:
+        """
+        Fallback method using Python-based calculation.
+        
+        This is used if the database function is not available.
+        """
+        try:
+            from app.schemas.station import HourlyAvailabilityAverageCreate
+            
+            logger.info(f"Using fallback calculation for station {station_id}")
+            
+            # Get ALL availability snapshots for this station
+            result = (
+                self.db.client.table('availability_snapshots')
+                .select('hour, day_of_week, available_bikes')
+                .eq('station_id', station_id)
+                .execute()
+            )
+            
+            if not result.data:
+                return {'averages_calculated': 0, 'message': 'No data available'}
+            
+            # Group data by hour and day_type
+            grouped_data = {}
+            for row in result.data:
+                hour = row['hour']
+                day_type = 'weekday' if row['day_of_week'] in [1, 2, 3, 4, 5] else 'weekend'
+                key = (hour, day_type)
+                
+                if key not in grouped_data:
+                    grouped_data[key] = {
+                        'total_snapshots': 0,
+                        'total_bikes': 0
+                    }
+                
+                grouped_data[key]['total_snapshots'] += 1
+                grouped_data[key]['total_bikes'] += row['available_bikes']
+            
+            # Calculate averages and upsert
+            averages_calculated = 0
+            for (hour, day_type), data in grouped_data.items():
+                if data['total_snapshots'] < 5:  # Skip if too few samples
+                    continue
+                
+                avg_bikes = data['total_bikes'] / data['total_snapshots']
+                
+                # Create average data
+                avg_data = HourlyAvailabilityAverageCreate(
+                    station_id=station_id,
+                    hour=hour,
+                    day_type=DayType(day_type),
+                    avg_bikes_available=Decimal(f"{avg_bikes:.2f}"),
+                    total_snapshots=data['total_snapshots']
+                )
+                
+                # Upsert the average
+                await self._upsert_hourly_average(avg_data)
+                averages_calculated += 1
+            
+            return {
+                'averages_calculated': averages_calculated,
+                'data_period': 'All historical data',
+                'total_snapshots': len(result.data)
+            }
+            
+        except Exception as e:
+            logger.error(f"Failed to calculate hourly averages for station {station_id}: {str(e)}")
+            raise Exception(f"Hourly averages calculation error: {str(e)}")
+    
+    async def _upsert_hourly_average(self, avg_data: 'HourlyAvailabilityAverageCreate') -> None:
+        """
+        Insert or update a hourly availability average (upsert operation).
+        
+        Args:
+            avg_data: Hourly average data to upsert
+        """
+        try:
+            # Check if average already exists
+            existing = (
+                self.db.client.table('hourly_availability_averages')
+                .select('id')
+                .eq('station_id', avg_data.station_id)
+                .eq('hour', avg_data.hour)
+                .eq('day_type', avg_data.day_type.value)
+                .execute()
+            )
+            
+            avg_dict = avg_data.model_dump()
+            avg_dict['day_type'] = avg_data.day_type.value
+            
+            # Convert Decimal to float for JSON serialization
+            if 'avg_bikes_available' in avg_dict:
+                avg_dict['avg_bikes_available'] = float(avg_dict['avg_bikes_available'])
+            
+            if existing.data:
+                # Update existing
+                self.db.client.table('hourly_availability_averages').update(avg_dict).eq('id', existing.data[0]['id']).execute()
+            else:
+                # Insert new
+                self.db.client.table('hourly_availability_averages').insert(avg_dict).execute()
+                
+        except Exception as e:
+            logger.error(f"Failed to upsert hourly average: {str(e)}")
+            raise

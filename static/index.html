@@ -239,13 +239,13 @@
                     return;
                 }
 
-                // Get station details and recent availability
-                const [stationDetails, availabilityData] = await Promise.all([
+                // Get station details and hourly averages
+                const [stationDetails, hourlyAverages] = await Promise.all([
                     getStationDetails(stationId),
-                    getRecentAvailability(stationId, 50)  // Get more snapshots for better time distribution (max allowed)
+                    getHourlyAverages(stationId)  // Get pre-calculated hourly averages
                 ]);
 
-                displayStationData(stationDetails, availabilityData);
+                displayStationData(stationDetails, hourlyAverages);
                 showResults();
 
             } catch (error) {
@@ -294,7 +294,16 @@
             return await response.json();
         }
 
-        function displayStationData(stationDetails, availabilityData) {
+        async function getHourlyAverages(stationId) {
+            // Get hourly availability averages from the new endpoint
+            const response = await fetch(`${API_BASE}/stations/${stationId}/hourly-averages`);
+            if (!response.ok) {
+                throw new Error(`Failed to fetch hourly averages: ${response.status}`);
+            }
+            return await response.json();
+        }
+
+        function displayStationData(stationDetails, hourlyAverages) {
             const station = stationDetails.station;
             const currentAvailability = stationDetails.current_availability;
             
@@ -325,47 +334,44 @@
 
             // Display availability data with timeslot selector
             const availabilityDiv = document.getElementById('availabilityData');
-            if (availabilityData && availabilityData.length > 0) {
-                availabilityDiv.innerHTML = `
-                    <div class="timeslot-selector">
-                        <h3>📅 Select Time Period</h3>
-                        <div class="timeslot-buttons">
-                            <button class="timeslot-btn" data-timeslot="night">
-                                🌙 Night<br>
-                                <span class="time-range">22:00 - 06:00</span>
-                            </button>
-                            <button class="timeslot-btn" data-timeslot="morning">
-                                🌅 Morning<br>
-                                <span class="time-range">06:00 - 12:00</span>
-                            </button>
-                            <button class="timeslot-btn" data-timeslot="afternoon">
-                                ☀️ Afternoon<br>
-                                <span class="time-range">12:00 - 18:00</span>
-                            </button>
-                            <button class="timeslot-btn" data-timeslot="evening">
-                                🌆 Evening<br>
-                                <span class="time-range">18:00 - 22:00</span>
-                            </button>
-                        </div>
+            
+            // Always show the timeslot selector
+            availabilityDiv.innerHTML = `
+                <div class="timeslot-selector">
+                    <h3>📅 Select Time Period</h3>
+                    <div class="timeslot-buttons">
+                        <button class="timeslot-btn" data-timeslot="night">
+                            🌙 Night<br>
+                            <span class="time-range">22:00 - 06:00</span>
+                        </button>
+                        <button class="timeslot-btn" data-timeslot="morning">
+                            🌅 Morning<br>
+                            <span class="time-range">06:00 - 12:00</span>
+                        </button>
+                        <button class="timeslot-btn" data-timeslot="afternoon">
+                            ☀️ Afternoon<br>
+                            <span class="time-range">12:00 - 18:00</span>
+                        </button>
+                        <button class="timeslot-btn" data-timeslot="evening">
+                            🌆 Evening<br>
+                            <span class="time-range">18:00 - 22:00</span>
+                        </button>
                     </div>
-                    <div class="filtered-snapshots" id="filteredSnapshots">
-                        <div class="no-data-message">
-                            Select a time period to view availability history
-                        </div>
+                </div>
+                <div class="filtered-snapshots" id="filteredSnapshots">
+                    <div class="no-data-message">
+                        ${hourlyAverages && hourlyAverages.length > 0 
+                            ? 'Select a time period to view hourly averages' 
+                            : 'No hourly averages available yet. Data may still be being calculated.'}
                     </div>
-                `;
-                
-                // Add event listeners for timeslot buttons
-                setupTimeslotButtons(availabilityData);
-            } else {
-                availabilityDiv.innerHTML = `
-                    <h3>Availability Data</h3>
-                    <p><em>No availability data available for this station.</em></p>
-                `;
-            }
+                </div>
+            `;
+            
+            // Add event listeners for timeslot buttons (pass empty array if no data)
+            setupTimeslotButtons(hourlyAverages || []);
         }
 
-        function setupTimeslotButtons(availabilityData) {
+        function setupTimeslotButtons(hourlyAverages) {
             const buttons = document.querySelectorAll('.timeslot-btn');
             const filteredSnapshotsDiv = document.getElementById('filteredSnapshots');
             
@@ -379,19 +385,18 @@
                     // Get the selected timeslot
                     const timeslot = button.getAttribute('data-timeslot');
                     
-                    // Filter snapshots for the selected timeslot
-                    const filteredSnapshots = filterSnapshotsByTimeslot(availabilityData, timeslot);
+                    // Filter hourly averages for the selected timeslot
+                    const filteredAverages = filterAveragesByTimeslot(hourlyAverages, timeslot);
                     
-                    // Display filtered snapshots
-                    displayFilteredSnapshots(filteredSnapshots, timeslot);
+                    // Display filtered averages
+                    displayFilteredAverages(filteredAverages, timeslot);
                 });
             });
         }
         
-        function filterSnapshotsByTimeslot(snapshots, timeslot) {
-            return snapshots.filter(snapshot => {
-                const date = new Date(snapshot.timestamp);
-                const hour = date.getHours();
+        function filterAveragesByTimeslot(averages, timeslot) {
+            return averages.filter(average => {
+                const hour = average.hour;
                 
                 switch (timeslot) {
                     case 'night':
@@ -405,16 +410,16 @@
                     default:
                         return false;
                 }
-            }).slice(0, 10); // Get last 10 snapshots for the period
+            }).sort((a, b) => a.hour - b.hour); // Sort by hour
         }
         
-        function displayFilteredSnapshots(snapshots, timeslot) {
+        function displayFilteredAverages(averages, timeslot) {
             const filteredSnapshotsDiv = document.getElementById('filteredSnapshots');
             
-            if (snapshots.length === 0) {
+            if (averages.length === 0) {
                 filteredSnapshotsDiv.innerHTML = `
                     <div class="no-data-message">
-                        No availability data found for ${timeslot} period
+                        No hourly averages found for ${timeslot} period
                     </div>
                 `;
                 return;
@@ -428,45 +433,31 @@
             };
             
             filteredSnapshotsDiv.innerHTML = `
-                <h3>${timeslotNames[timeslot]} - Last ${snapshots.length} snapshots</h3>
+                <h3>${timeslotNames[timeslot]} - Hourly Averages</h3>
                 <table class="availability-table">
                     <thead>
                         <tr>
-                            <th>Date & Time</th>
-                            <th>Bikes Available</th>
-                            <th>Time Ago</th>
+                            <th>Hour</th>
+                            <th>Day Type</th>
+                            <th>Avg Bikes Available</th>
+                            <th>Data Points</th>
                         </tr>
                     </thead>
                     <tbody>
-                        ${snapshots.map(snapshot => {
-                            const bikes = snapshot.available_bikes || 0;
-                            const snapshotClass = bikes > 5 ? 'bikes-available' : 
+                        ${averages.map(average => {
+                            const bikes = parseFloat(average.avg_bikes_available);
+                            const bikesClass = bikes > 5 ? 'bikes-available' : 
                                                bikes > 0 ? 'bikes-low' : 'bikes-none';
                             
-                            // Calculate time difference
-                            const now = new Date();
-                            const snapshotTime = new Date(snapshot.timestamp);
-                            const diffMs = now - snapshotTime;
-                            const diffMinutes = Math.floor(diffMs / (1000 * 60));
-                            const diffHours = Math.floor(diffMs / (1000 * 60 * 60));
-                            const diffDays = Math.floor(diffMs / (1000 * 60 * 60 * 24));
-                            
-                            let timeAgo;
-                            if (diffMinutes < 1) {
-                                timeAgo = 'Just now';
-                            } else if (diffMinutes < 60) {
-                                timeAgo = `${diffMinutes} min ago`;
-                            } else if (diffHours < 24) {
-                                timeAgo = `${diffHours} hr ago`;
-                            } else {
-                                timeAgo = `${diffDays} day${diffDays !== 1 ? 's' : ''} ago`;
-                            }
+                            // Format hour display
+                            const hourDisplay = `${average.hour.toString().padStart(2, '0')}:00 - ${(average.hour + 1).toString().padStart(2, '0')}:00`;
                             
                             return `
                                 <tr>
-                                    <td>${new Date(snapshot.timestamp).toLocaleString()}</td>
-                                    <td class="${snapshotClass}">${bikes}</td>
-                                    <td>${timeAgo}</td>
+                                    <td>${hourDisplay}</td>
+                                    <td>${average.day_type}</td>
+                                    <td class="${bikesClass}">${bikes.toFixed(1)}</td>
+                                    <td>${average.total_snapshots}</td>
                                 </tr>
                             `;
                         }).join('')}

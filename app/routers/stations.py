@@ -20,6 +20,7 @@ from app.schemas.station import (
     StationReliabilityTimeline,
     ReliabilityScore,
     AvailabilitySnapshot,
+    HourlyAvailabilityAverage,
     DayType,
     ErrorResponse,
 )
@@ -430,4 +431,57 @@ async def get_station_availability_history(
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail="Failed to retrieve availability history"
+        )
+
+
+@router.get("/{station_id}/hourly-averages", response_model=List[HourlyAvailabilityAverage])
+async def get_station_hourly_averages(
+    station_id: int,
+    day_type: Optional[DayType] = Query(None, description="Filter by day type (weekday/weekend)"),
+    repo: StationRepository = Depends(get_station_repository)
+):
+    """
+    Get hourly availability averages for a specific station.
+    
+    This endpoint returns pre-calculated hourly averages showing the average
+    number of bikes available during each hour of the day, based on historical data.
+    
+    Args:
+        station_id: Unique station identifier
+        day_type: Optional filter by day type (weekday/weekend)
+        repo: Station repository dependency
+        
+    Returns:
+        List[HourlyAvailabilityAverage]: Hourly availability averages
+        
+    Raises:
+        HTTPException: If station not found or database operation fails
+        
+    Example:
+        GET /api/stations/1/hourly-averages?day_type=weekday
+    """
+    try:
+        logger.info(f"Fetching hourly averages for station {station_id} (day_type={day_type})")
+        
+        # Verify station exists
+        station = await repo.get_station_by_id(station_id)
+        if not station:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail=f"Station with ID {station_id} not found"
+            )
+        
+        # Get hourly averages
+        averages = await repo.get_hourly_averages(station_id, day_type)
+        
+        logger.info(f"Retrieved {len(averages)} hourly averages for station {station_id}")
+        return averages
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Failed to fetch hourly averages for station {station_id}: {str(e)}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Failed to retrieve hourly averages"
         )
