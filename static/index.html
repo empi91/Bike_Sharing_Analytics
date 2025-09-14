@@ -144,7 +144,7 @@
         <div class="search-form">
             <div class="input-group">
                 <label for="stationInput">Station Name or ID:</label>
-                <input type="text" id="stationInput" placeholder="Enter station name (e.g., GDA398) or ID (e.g., 1)" value="GDA398">
+                <input type="text" id="stationInput" placeholder="Enter station name (e.g., GDA148) or ID (e.g., 1)" value="GDA148">
             </div>
             <button id="searchBtn">Get Station Data</button>
         </div>
@@ -284,16 +284,6 @@
                                  bikesAvailable > 0 ? 'bikes-low' : 'bikes-none';
                 
                 availabilityDiv.innerHTML = `
-                    <h3>Current Status</h3>
-                    <div class="detail-item">
-                        <div class="detail-label">Bikes Available</div>
-                        <div class="detail-value ${bikesClass}">${bikesAvailable}</div>
-                    </div>
-                    <div class="detail-item">
-                        <div class="detail-label">Last Updated</div>
-                        <div class="detail-value">${new Date(mostRecent.timestamp).toLocaleString()}</div>
-                    </div>
-                    
                     <h3>Recent Availability History (Last ${availabilityData.length} snapshots)</h3>
                     <table class="availability-table">
                         <thead>
