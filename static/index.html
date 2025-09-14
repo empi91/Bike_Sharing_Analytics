@@ -251,6 +251,11 @@
             
             // Display station info
             const stationInfoDiv = document.getElementById('stationInfo');
+            
+            // Get current bikes available from the most recent snapshot
+            const currentBikes = currentAvailability ? currentAvailability.available_bikes : 0;
+            const totalCapacity = station.total_docks;
+            
             stationInfoDiv.innerHTML = `
                 <div class="station-name">${station.name}</div>
                 <div class="station-details">
@@ -263,16 +268,8 @@
                         <div class="detail-value">${station.address || 'Address not available'}</div>
                     </div>
                     <div class="detail-item">
-                        <div class="detail-label">Location</div>
-                        <div class="detail-value">${parseFloat(station.latitude).toFixed(6)}, ${parseFloat(station.longitude).toFixed(6)}</div>
-                    </div>
-                    <div class="detail-item">
-                        <div class="detail-label">Capacity</div>
-                        <div class="detail-value">${station.total_docks}</div>
-                    </div>
-                    <div class="detail-item">
-                        <div class="detail-label">Status</div>
-                        <div class="detail-value">${station.is_active ? 'Active' : 'Inactive'}</div>
+                        <div class="detail-label">Bikes Available</div>
+                        <div class="detail-value">${currentBikes} / ${totalCapacity}</div>
                     </div>
                 </div>
             `;
